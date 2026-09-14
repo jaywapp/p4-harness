@@ -8,6 +8,10 @@
 
 작업 계획·JSONL 변경 이력·Claude 단계별 스킬·Codex 리뷰 핑퐁은 별도 [jsonl-prr](https://github.com/jaywapp/jsonl-prr)에서 관리합니다. `jsonl-prr`는 형상관리와 독립적이고, 이 저장소는 P4 파일 준비·CL·검증·인계에 집중합니다. 함께 사용할 때의 순서와 제한은 [역할 경계](docs/workflow-boundary.md)에 정리했습니다.
 
+![Claude Code와 Codex가 공통 하네스를 통해 파일을 준비하고 같은 작업 CL과 현재 파일의 검증 결과를 유지하는 구조](docs/images/core-ideas.png)
+
+[이미지 해설](docs/core-ideas.md) · [SVG 원본](docs/images/core-ideas.svg)
+
 ## 제공하는 기능
 
 | 기능 | Claude Code | Codex |
