@@ -50,7 +50,8 @@ class UnitTests(unittest.TestCase):
 
     def test_physical_paths_and_metadata_are_protected(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            # Windows TEMP can use an 8.3 alias (RUNNER~1); compare physical roots.
+            root = Path(tmp).resolve()
             for value in ("../outside", ".p4-harness/state/file", ".codex/hooks.json", "AGENTS.md", "src/..."):
                 with self.assertRaises(HarnessError):
                     local_path(root, value)

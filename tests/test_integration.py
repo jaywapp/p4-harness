@@ -27,7 +27,7 @@ class IntegrationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="p4-harness-integration-")
         self.addCleanup(self.temp.cleanup)
-        self.folder = Path(self.temp.name)
+        self.folder = Path(self.temp.name).resolve()
         self.root = self.folder / "workspace with space"
         self.root.mkdir()
         server_root = self.folder / "server"
