@@ -21,6 +21,7 @@
 - **작업 소유권:** 한 물리 워크스페이스에 active task 하나와 작성 세션 하나를 둡니다. CL 번호만 나눠서는 동시 편집이 격리되지 않습니다.
 - **명시적 P4 작업:** `prepare`, `collect`, `delete`, `move`, `shelve`를 제공합니다. 전체 workspace reconcile을 적용하지 않습니다.
 - **실제 파일에 연결된 검증:** 파일 해시·have revision·CL action·check 설정이 달라지면 이전 검증으로 완료할 수 없습니다.
+- **필요한 결과부터 조회:** 기본 변경 요약, 이전 snapshot 이후 파일 비교, 실패 로그 선별, 짧은 인계 context, 필수 검증 일괄 실행을 제공합니다. 원본 manifest·로그는 보존합니다.
 - **검토 가능한 완료:** `finish`는 JSON 보고서를 만들고 pending CL을 남깁니다. submit은 기존 팀 절차에서 수행합니다.
 
 ## 빠른 시작
@@ -70,15 +71,17 @@ p4h prepare src/parser/reader.py
 
 ```text
 p4h collect
-p4h changes
-p4h verify unit
+p4h verify --required
 p4h handoff --to codex --note "파서 수정 완료. 경계값 테스트를 검토하고 마무리할 것."
 ```
 
-Codex를 실행해 `status`의 목표·범위·인계 메모를 읽고 같은 CL에서 이어갑니다. 수정했다면 검증을 다시 실행합니다.
+collect의 파일/action 목록과 관련 코드를 검토한 뒤 verify합니다. 출력이 잘렸다면 `changes --offset <next_offset>` 또는 `changes --full`로 필요한 전체 목록을 확인합니다. 나중에 같은 작업의 파일 변화를 다시 볼 때는 `changes --since <snapshot_id>`를 사용합니다.
+
+Codex를 실행해 `context`의 목표·범위·인계 메모·현재 검증 상태를 읽고 같은 CL에서 이어갑니다. 수정했다면 검증을 다시 실행합니다.
 
 ```text
-p4h verify unit
+p4h context
+p4h verify --required
 p4h shelve
 p4h finish
 ```
@@ -102,6 +105,8 @@ p4h finish
 
 이는 **기존 config에 병합할 항목**입니다. root/client 등의 기존 값을 지우지 마세요. 초기 상태에는 프로젝트 테스트를 추측해 넣지 않으며 `finish` 결과는 `verification: not_configured`입니다. [설정과 명령](docs/configuration.md), [작업·복구 절차](docs/workflow.md)를 참고하세요.
 
+0.2부터 `collect`, `changes`, `verify`는 기본 요약 출력입니다. 기존 상세 JSON을 사용하는 자동화에는 `--full`을 지정합니다. Python 도구의 역할, 토큰 절감 아이디어·구현 범위·측정 방법은 [토큰 효율 설계](docs/token-efficiency.md)에 정리했습니다. 실제 토큰·비용 절감률은 아직 측정하지 않았습니다.
+
 ## 적용 범위와 검증
 
 훅은 지원되는 편집을 준비하고 흔한 잘못된 P4 명령을 거절하는 협업 장치입니다. 임의 shell 스크립트·MCP·외부 편집기까지 통제하는 OS 보안 경계는 아닙니다. 일반 CLI 권한·조직 P4 권한을 유지하고, 동시에 작성해야 하는 작업은 별도 client와 물리 root를 사용합니다.
@@ -111,6 +116,7 @@ p4h finish
 - [구조와 설계 결정](docs/architecture.md)
 - [설정·설치 파일·플랫폼 차이](docs/configuration.md)
 - [작업·검증·인계·복구](docs/workflow.md)
+- [토큰 절감 아이디어·반영 기능·기대효과](docs/token-efficiency.md)
 - [테스트 실행과 실제 CLI 확인](docs/testing.md)
 
 ## 하네스 개발

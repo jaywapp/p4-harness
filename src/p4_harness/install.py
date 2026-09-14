@@ -102,6 +102,11 @@ def install(workspace, client, port=None, user=None, p4_bin="p4", dry_run=False)
     templates = files("p4_harness").joinpath("templates")
     rules = templates.joinpath("rules.md").read_text(encoding="utf-8").replace("{{COMMAND}}", command)
     targets[".p4-harness/rules.md"] = rules
+    targets[".p4-harness/workflows.md"] = templates.joinpath("workflows.md").read_text(encoding="utf-8")
+    # The project map is operator-owned. Refreshing adapters must not overwrite their notes.
+    current(".p4-harness/project-map.md")
+    if not (control / "project-map.md").exists():
+        targets[".p4-harness/project-map.md"] = templates.joinpath("project-map.md").read_text(encoding="utf-8")
     targets["AGENTS.md"] = managed_block(current("AGENTS.md"),
         "Before working in this Perforce workspace, read `.p4-harness/rules.md` and follow its task/CL workflow.")
     targets["CLAUDE.md"] = managed_block(current("CLAUDE.md"), "@.p4-harness/rules.md")

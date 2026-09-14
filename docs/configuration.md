@@ -6,6 +6,8 @@
 |---|---|
 | `.p4-harness/config.json` | root/client/P4 명령/검증 profile |
 | `.p4-harness/rules.md` | 공통 작업 규칙과 실제 CLI 경로 |
+| `.p4-harness/workflows.md` | 필요할 때 읽는 상세 검토·복구 절차 |
+| `.p4-harness/project-map.md` | 프로젝트 경로·진입점·검증 안내 틀; 사용자 내용은 재설치 시 보존 |
 | `.p4-harness/state/` | active task, task history, manifest, 로그, 보고서 |
 | `.p4-harness/backups/` | 설치 시 변경한 기존 파일의 사본 |
 | `.p4-harness.p4ignore` | 설치 산출물을 위한 ignore 규칙 |
@@ -84,13 +86,16 @@ Claude는 `CLAUDE.md`에서 `.p4-harness/rules.md`를 import합니다. `.claude/
 | `install --client ... [--dry-run]` | 두 어댑터 설치/변경 예정 목록 |
 | `doctor` | 실제 root/client/view와 CLI 위치 확인 |
 | `status` | 작업·CL·범위·소유자·인계 메모 |
+| `context [--full]` | 최신 P4 snapshot과 대조한 검증·변경·인계 요약; 소스/CL 변경 없음 |
 | `begin --task ID --agent claude\|codex --scope PATH --goal TEXT` | clean scope 검사 후 새 pending CL 생성; scope 반복 가능 |
 | `prepare FILE ...` | 기존 파일 checkout / 새 경로 예약 |
-| `collect` | 예약된 새 파일 add 후 snapshot 작성 |
-| `changes` | 현재 등록된 변경 manifest; 새 파일 add는 수행하지 않음 |
+| `collect [--full]` | 예약된 새 파일 add 후 snapshot 작성, 기본은 요약 |
+| `changes [--full]` | 현재 등록된 변경 요약/전체 manifest; 새 파일 add 없음 |
+| `changes --since SNAPSHOT_ID [--full]` | 같은 작업의 이전 snapshot 이후 파일 항목 비교; 텍스트 diff는 아님 |
 | `delete FILE` | 깨끗하고 unopened인 tracked 파일 삭제 예약 |
 | `move SOURCE DESTINATION` | P4 move action 유지; 새 목적지만 허용 |
-| `verify PROFILE` | 명시된 검증 실행, 로그·상태 기록 |
+| `verify PROFILE [--full]` | 검증 실행·원본 로그 보관; 기본 성공 요약/실패 발췌 |
+| `verify --required [--full]` | 필수 profile 순서대로 실행, 실패·timeout·stale에서 중단 |
 | `handoff --to AGENT --note TEXT` | 같은 workspace/CL의 작성 소유권 인계 |
 | `pause --note TEXT` | 파일을 보존하며 작업 일시 정지 |
 | `resume --agent AGENT` | 명시적으로 현재 task를 재개하고 세션 소유권 초기화 |
@@ -99,3 +104,13 @@ Claude는 `CLAUDE.md`에서 `.p4-harness/rules.md`를 import합니다. `.claude/
 | `launch claude\|codex -- ...` | root에서 CLI 실행; `--` 뒤 인자는 해당 CLI에 전달 |
 
 일반 출력은 JSON이며 오류와 검증 실패/timeout/stale은 exit 1입니다. hook 명령은 provider protocol에 맞춰 deny도 JSON과 exit 0으로 반환합니다.
+
+## 요약 출력과 업그레이드
+
+0.2부터 `collect`, `changes`, `verify`의 기본 응답이 요약형입니다. 기존 상세 출력이 필요한 자동화에는 `--full`을 붙입니다. `collect/changes --full`은 기존 전체 manifest, `verify PROFILE --full`은 검증 메타데이터와 기존 `output_tail`을 유지합니다. verify의 `--full`도 원본 로그 전체를 출력하지 않습니다.
+
+`collect`, `changes`, `context`는 `--limit 1..200`(기본 10), `--offset 0..`(기본 0)을 받습니다. 잘린 목록은 `page.truncated`와 `next_offset`으로 확인합니다. `--full`에서는 페이지 제한을 적용하지 않습니다. `changes --since`는 64자리 snapshot ID를 받으며 before/after 항목 비교 schema를 사용합니다.
+
+`verify --required`의 빈 필수 목록은 `status: not_configured`, exit 0입니다. 검증 통과를 의미하지 않습니다. 필수 profile은 기존 config의 `checks`와 `required_checks`에 등록합니다. 검증 결과를 사용하는 자동화는 종료 코드와 상태를 함께 확인하세요.
+
+업데이트 후 같은 설치 인자로 `install --dry-run`, `install`을 실행하면 공통 규칙·skill·workflow 파일이 갱신됩니다. `project-map.md`는 최초 생성만 하고 기존 내용을 덮어쓰지 않습니다. 기능별 출력 필드와 한계는 [토큰 효율 설계](token-efficiency.md)에 있습니다.

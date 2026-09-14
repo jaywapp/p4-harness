@@ -1,21 +1,18 @@
 ---
 name: p4-work
-description: Perform source changes, review preparation, shelving, or Claude/Codex handoff in a Perforce workspace with p4-harness installed. Use when .p4-harness/config.json exists and the work concerns P4-managed files.
+description: Perform scoped source changes, review preparation or Claude/Codex handoff in a Perforce workspace containing .p4-harness/config.json. Use the shared p4-harness workflow for P4-managed files.
 ---
 
 # P4 work
 
-Read `.p4-harness/rules.md` if it is not already loaded. Use the same CLI for Claude and Codex:
+Read `.p4-harness/rules.md` if not already loaded. Shared CLI prefix:
 
 ```text
 {{COMMAND}}
 ```
 
-1. Inspect `doctor` and `status`. Continue an existing task only when its goal/scope and ownership match the request; otherwise preserve it and resolve the mismatch.
-2. Start with `begin --task <id> --agent claude|codex --scope <path> --goal <goal>` when no task exists. For a read-only investigation, a task/checkout is unnecessary.
-3. Read relevant sources. Prepare files before unsupported/shell edits; supported native file tools run the installed preparation hook. Use CLI `delete`/`move` for those P4 actions.
-4. Run `collect`, inspect `changes`, and review each action against the request. New files need their full content reviewed; deleted and moved files are not covered by an edit diff alone.
-5. Run the configured `verify <profile>` commands. If no checks exist, clearly report that verification is unconfigured.
-6. As requested, `handoff --to <agent> --note <context>` or `shelve`; otherwise `finish` to produce the pending-CL report. Finish does not submit.
+Use `context` for live task/CL/check/handoff information; investigate read-only without starting a task when appropriate. Follow existing scope and ownership, and read only relevant project-map/code sections.
 
-On a lock/auth/mapping conflict, stop the affected mutation and preserve the task. On interruption, use `pause` and provide enough information for `resume`; do not undo the work as cleanup. Keep source scope and snapshot evidence intact across agent changes.
+After edits, use `collect` once, review its actions and relevant code, then `verify --required` (or a specific profile). Use `changes --since <snapshot_id>` for later file-list comparisons. Expand paginated/truncated output as needed. Failures point to full logs.
+
+Finish or explicitly handoff/pause as requested. Read `.p4-harness/workflows.md` for detailed review and recovery. Keep handoff notes to decisions, unresolved issues and next actions; another agent needs a distinct purpose.

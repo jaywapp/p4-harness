@@ -68,7 +68,7 @@ def run_hook(flow, agent, event):
     session = event.get("session_id")
     active = flow.active(False)
     if name == "SessionStart":
-        text = "Perforce workspace. Read .p4-harness/rules.md. Use p4h doctor then begin before editing."
+        text = "Perforce workspace. Read .p4-harness/rules.md. Use p4h context for a compact live task view; doctor then begin for new work."
         if active:
             text += f" Active task={active['id']}; CL={active['change']}; owner={active['owner']}; status={active['status']}."
         return {"hookSpecificOutput": {"hookEventName": name, "additionalContext": text}}
@@ -83,7 +83,7 @@ def run_hook(flow, agent, event):
         elif tool in {"Bash", "PowerShell", "exec_command", "shell_command"}:
             command = args.get("command", args.get("cmd", ""))
             shell_policy(command)
-            read_harness = bool(re.search(r"(?:p4h(?:\.py)?|p4_harness)\b.*\b(?:doctor|status|changes)\b", command))
+            read_harness = bool(re.search(r"(?:p4h(?:\.py)?|p4_harness)\b.*\b(?:doctor|status|changes|context)\b", command))
             recovery = bool(re.search(r"(?:p4h(?:\.py)?|p4_harness)\b.*\bresume\b", command))
             if active and not looks_read_only(command) and not read_harness:
                 if not (recovery and active["status"] == "paused"):

@@ -6,6 +6,7 @@ import subprocess
 import time
 
 from .common import HarnessError, digest, local_path, now, task_id
+from .reporting import failure_excerpt
 
 
 def verify(flow, name, agent=None):
@@ -68,4 +69,33 @@ def verify(flow, name, agent=None):
     with log.open("rb") as stream:
         stream.seek(max(0, log.stat().st_size - 4000))
         excerpt = stream.read().decode("utf-8", errors="replace")
-    return {**record, "output_tail": excerpt}
+    result = {**record, "check": name, "output_tail": excerpt}
+    if status != "passed":
+        result["diagnostics"] = failure_excerpt(log)
+    return result
+
+
+def verify_required(flow, agent=None):
+    """Run required profiles without an LLM round trip between each command."""
+    flow.require_owner(flow.active(), agent)
+    names = flow.config.data.get("required_checks", [])
+    if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
+        raise HarnessError("required_checks must be an array of profile names.")
+    if len(names) != len(set(names)):
+        raise HarnessError("required_checks must not contain duplicate names.")
+    for name in names:
+        task_id(name)
+        if name not in flow.config.data.get("checks", {}):
+            raise HarnessError(f"Required profile is not configured: {name}")
+    results = []
+    for index, name in enumerate(names):
+        result = verify(flow, name, agent)
+        results.append(result)
+        if result["status"] != "passed":
+            return {"status": result["status"], "checks": results, "not_run": names[index + 1:]}
+        stale = [row["check"] for row in results if row["snapshot_id"] != result["snapshot_id"]]
+        if stale:
+            return {"status": "stale", "checks": results, "stale_checks": stale,
+                    "message": "Source changed between required checks; rerun against stable files.",
+                    "not_run": names[index + 1:]}
+    return {"status": "passed" if names else "not_configured", "checks": results, "not_run": []}

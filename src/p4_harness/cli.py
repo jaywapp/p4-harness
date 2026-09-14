@@ -21,8 +21,15 @@ def parser():
     init.add_argument("--user")
     init.add_argument("--p4-bin", default="p4")
     init.add_argument("--dry-run", action="store_true")
-    for name in ("doctor", "status", "changes", "collect", "shelve", "finish"):
+    for name in ("doctor", "status", "shelve", "finish"):
         sub.add_parser(name)
+    for name in ("changes", "collect", "context"):
+        view = sub.add_parser(name)
+        view.add_argument("--full", action="store_true", help="Return full records instead of the compact view")
+        view.add_argument("--limit", type=int, default=10, help="Files per summary page (1..200)")
+        view.add_argument("--offset", type=int, default=0, help="Summary page offset")
+        if name == "changes":
+            view.add_argument("--since", help="Compare file entries against this task's full snapshot ID")
     begin = sub.add_parser("begin", help="Start one clean-scope task and create its pending CL")
     begin.add_argument("--task", required=True)
     begin.add_argument("--goal", required=True)
@@ -36,7 +43,9 @@ def parser():
     move.add_argument("source")
     move.add_argument("destination")
     check = sub.add_parser("verify")
-    check.add_argument("profile")
+    check.add_argument("profile", nargs="?")
+    check.add_argument("--required", action="store_true", help="Run required checks in order, stopping on the first failure")
+    check.add_argument("--full", action="store_true", help="Include complete check metadata and the legacy log tail")
     handoff = sub.add_parser("handoff")
     handoff.add_argument("--to", choices=("claude", "codex"), required=True)
     handoff.add_argument("--note", required=True)
@@ -97,6 +106,11 @@ def main(argv=None):
         apply_ignore(config)
         flow = Workflow(config)
         actor = os.environ.get("P4_HARNESS_AGENT")
+        if args.command in {"changes", "collect", "context"}:
+            from .reporting import page
+            page([], args.limit, args.offset)  # Reject invalid pagination before collect can add files.
+        if args.command == "verify" and bool(args.profile) == args.required:
+            raise HarnessError("Specify exactly one profile or --required.")
         if args.command == "launch":
             flow.doctor()
             executable = shutil.which(args.agent)
@@ -124,9 +138,16 @@ def main(argv=None):
                 case "prepare":
                     result = flow.prepare(args.files, actor)
                 case "changes":
-                    result = flow.snapshot()
+                    from .reporting import snapshot_output
+                    result = snapshot_output(flow, flow.snapshot(), since=args.since, full=args.full,
+                                             limit=args.limit, offset=args.offset)
                 case "collect":
-                    result = flow.collect(actor)
+                    from .reporting import snapshot_output
+                    result = snapshot_output(flow, flow.collect(actor), full=args.full,
+                                             limit=args.limit, offset=args.offset)
+                case "context":
+                    from .reporting import context_output
+                    result = context_output(flow, full=args.full, limit=args.limit, offset=args.offset)
                 case "delete":
                     result = flow.delete(args.file, actor)
                 case "move":
@@ -140,10 +161,15 @@ def main(argv=None):
                 case "shelve":
                     result = flow.shelve(actor)
                 case "verify":
-                    from .checks import verify
-                    result = verify(flow, args.profile, actor)
+                    from .checks import verify, verify_required
+                    from .reporting import check_output
+                    if args.required:
+                        result = verify_required(flow, actor)
+                        result["checks"] = [check_output(row, full=args.full) for row in result["checks"]]
+                    else:
+                        result = check_output(verify(flow, args.profile, actor), full=args.full)
                     emit(result)
-                    return 0 if result["status"] == "passed" else 1
+                    return 0 if result["status"] in {"passed", "not_configured"} else 1
                 case "finish":
                     result = flow.finish(actor)
             emit(result)

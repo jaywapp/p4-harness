@@ -2,7 +2,7 @@
 
 ## 시작과 범위
 
-1. `doctor`, `status`로 client/root와 현재 작업을 확인합니다. 조사만 한다면 task나 checkout이 필요하지 않습니다.
+1. 새 작업은 `doctor`, 기존 작업은 `context`로 확인합니다. context는 현재 snapshot과 검증을 대조하며, 연결 문제 등으로 실패하면 `status`로 저장된 메모를 확인할 수 있습니다. 조사만 한다면 task나 checkout이 필요하지 않습니다.
 2. 수정할 소스와 관련 테스트를 읽고 작은 scope를 선택합니다. `--scope src/component --scope tests/component`처럼 복수 지정할 수 있습니다.
 3. 기존 열린 파일이나 offline 변경이 scope 안에 있으면 보존하고 더 좁은 scope를 선택합니다. 기존 CL을 자동 reopen하거나 파일을 원복해 시작 조건을 만들지 않습니다.
 4. `begin`으로 작업 CL을 생성합니다. ID는 영문·숫자·하이픈·밑줄 1~80자이고 이전 ID는 재사용하지 않습니다.
@@ -13,15 +13,19 @@
 
 지원 native 편집은 훅에서 checkout합니다. shell 편집은 `prepare` 후 수행합니다. `chmod`/`attrib`로 읽기 전용 표시를 지우는 방식은 사용하지 않습니다. 읽기 전용 속성을 자동 복구할 필요 없이 P4가 checkout을 담당합니다.
 
-`collect`는 예약된 새 파일만 add합니다. `changes`는 task CL의 모든 opened 파일이 scope·예약 목록에 속하는지, 다른 CL의 파일이 섞이지 않았는지, unresolved/offline 변경이 남지 않았는지 확인하고 manifest를 반환합니다.
+`collect`는 예약된 새 파일만 add합니다. `changes`는 task CL의 모든 opened 파일이 scope·예약 목록에 속하는지, 다른 CL의 파일이 섞이지 않았는지, unresolved/offline 변경이 남지 않았는지 확인합니다. 두 명령 모두 전체 manifest를 디스크에 저장하고 기본 응답은 경로/action과 총계만 요약합니다. `page.truncated`라면 다음 offset 또는 `--full`로 누락된 파일을 검토합니다. 페이지 사이 snapshot ID가 바뀌면 새 목록 기준으로 다시 확인합니다.
 
 manifest에는 파일 경로·depot path·P4 action·type·have revision·SHA-256이 있습니다. manifest 자체가 코드 리뷰를 대신하지는 않습니다. 기존 파일은 해당 파일의 `p4 diff -du <file>`과 내용을 읽고, add 파일은 전체 내용, delete/move 파일은 의도와 참조 영향을 확인합니다. 전체 workspace diff에 다른 사용자 작업이 섞이지 않게 파일 범위를 명시합니다.
+
+추가 편집 후에는 `changes --since <이전 snapshot_id>`로 달라진 파일 항목만 조회할 수 있습니다. introduced/updated/removed는 manifest 항목의 변화이며 P4 action이나 텍스트 diff와 다릅니다. 저장된 snapshot으로 현재 CL·환경 검사를 생략하지 않습니다. 새 예약 파일을 썼다면 먼저 collect합니다.
 
 `delete`는 깨끗한 tracked 파일만 처리합니다. 수정 중인 파일을 삭제해야 한다면 우선 그 수정의 처리 방향을 정해야 하므로 거절됩니다. `move`는 source를 작업 CL로 준비하고 기존 목적지를 덮어쓰지 않습니다. file type과 `+l` 같은 독점 checkout 정책은 서버의 결정을 따릅니다.
 
 ## 검증과 완료
 
-`verify`는 collect 후 snapshot을 만들고 설정된 argv를 실행합니다. 출력 전체는 로그에, 마지막 일부는 JSON 결과에 남깁니다. 종료 코드가 0이고 실행 전후 상태가 같을 때만 passed입니다. timeout·실패·실행 중 변경은 기록되고 완료 조건을 충족하지 못합니다.
+`verify PROFILE`은 collect 후 snapshot을 만들고 설정된 argv를 실행합니다. 원본 출력은 모두 로그에 보관합니다. 기본 JSON은 성공 시 짧은 상태·로그 경로, 실패 시 오류 주변의 제한된 발췌를 반환합니다. 원인을 놓쳤다면 전체 로그를 확인합니다. `--full`은 전체 메타데이터와 기존 마지막 일부 출력을 반환합니다. 종료 코드가 0이고 실행 전후 상태가 같을 때만 passed입니다. timeout·실패·실행 중 변경은 기록되고 완료 조건을 충족하지 못합니다.
+
+`verify --required`는 등록된 필수 검증을 순서대로 실행하고 실패·timeout·stale에서 멈춥니다. 남은 항목은 `not_run`에 표시합니다. 검증 사이 snapshot 변화도 전체 stale이며, 필수 목록이 비면 not_configured입니다. `--required`와 개별 profile을 함께 지정하지 않습니다.
 
 `finish`는 `required_checks` 전체의 status·snapshot·profile이 현재 상태와 일치해야 성공합니다. 필수 검증을 설정하지 않았다면 `not_configured`라고 명시합니다. 코드가 바뀐 뒤 지난 테스트 통과를 재사용하지 않습니다. 검증 작업은 소스를 자동 format하는 명령과 나누는 것이 좋습니다.
 
@@ -29,7 +33,9 @@ manifest에는 파일 경로·depot path·P4 action·type·have revision·SHA-25
 
 ## Claude와 Codex 인계
 
-`handoff --to codex --note "남은 검토와 실행할 테스트"`는 같은 물리 파일·CL·검증 기록을 유지하고 소유자와 session binding을 변경합니다. 반대 방향도 같습니다. 받는 쪽은 `status`와 관련 코드를 확인하고 이어갑니다. 완료 후 단순 대화 내용을 옮기는 것과 달리 작업 범위·CL·snapshot은 디스크에 남습니다.
+`handoff --to codex --note "결정 사항·남은 검토·다음 행동"`은 같은 물리 파일·CL·검증 기록을 유지하고 소유자와 session binding을 변경합니다. 반대 방향도 같습니다. 받는 쪽은 `context`와 관련 코드를 확인하고 이어갑니다. context는 저장된 검증과 현재 snapshot/profile을 비교해 stale 여부를 보여줍니다. 긴 목표·메모·scope의 생략은 `truncated_fields`로 표시하며 `context --full`로 확인할 수 있습니다.
+
+인계 메모에 전체 대화·코드·로그를 반복해서 넣지 않습니다. 일상 작업은 한 에이전트가 맡고, 추가 에이전트가 필요하면 리뷰 목적과 필요한 범위를 정합니다. 프로젝트 경로 안내는 `.p4-harness/project-map.md`, 상세 절차는 `.p4-harness/workflows.md`의 관련 부분만 읽습니다.
 
 두 CLI를 모두 켜 둘 수는 있지만, 이전 owner의 native 편집은 거절됩니다. 일반 shell/MCP까지 완전히 차단하는 장치는 아니므로 실제 동시 작성은 별도 client/root로 격리합니다. 같은 제품의 두 번째 세션도 자동으로 작성 소유권을 가져가지 않습니다.
 

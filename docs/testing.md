@@ -25,6 +25,13 @@ P4_BIN=/absolute/path/to/p4 P4D_BIN=/absolute/path/to/p4d python3 -m unittest di
 - 실제 subprocess hook deny JSON과 P4IGNORE/P4CONFIG 우선순위
 - 검증 stale·실패·timeout, 변경된 have revision, 다른 CL·독점 checkout 충돌
 - 공백·한글·Perforce 특수 문자가 포함된 파일
+- 요약 페이지에서도 전체 action 총계 보존, full schema, 파일 내용/action/type/revision 비교, 손상·다른 task manifest 거절
+- 실패 로그의 앞쪽 원인·긴 행·반복 진단·스캔 한도·알 수 없는 형식, 원본 로그 보존과 성공 시 로그 생략
+- 최신 context의 파일/profile 변경 stale, 인계 메모 생략 표시, 조회 중 소스/CL/소유권 보존
+- 필수 검증 일괄 실행의 중단·미실행 목록·snapshot 불일치, 빈 검증 목록의 not_configured
+- 재설치 시 사용자가 채운 project map 보존
+
+합성 200개 파일의 요약과 전체 manifest는 JSON 직렬화 바이트 크기도 비교합니다. 실제 모델 토큰·청구 비용·생산성 측정은 아니며 [측정 방법](token-efficiency.md#효과를-확인하는-방법)을 따로 구분합니다.
 
 GitHub Actions는 Ubuntu/Windows에서 단위 테스트, Ubuntu에서 공식 r26.1 `p4/p4d`를 내려받아 통합 테스트를 실행합니다. r26.1 다운로드 경로는 해당 release 채널의 최신 패치로 바뀔 수 있으므로 CI 로그에 실제 버전을 남깁니다.
 

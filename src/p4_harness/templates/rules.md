@@ -1,26 +1,18 @@
 # Perforce workspace contract
 
-This workspace uses Perforce. The harness source repository uses Git, but this installed contract applies only to the P4 workspace.
-
-The shared command prefix is:
+Shared CLI prefix for Claude Code and Codex:
 
 ```text
 {{COMMAND}}
 ```
 
-- Read the current task with `status`; verify the actual client/root with `doctor`.
-- Before source changes, `begin --task <id> --agent claude|codex --scope <path> --goal <goal>`. Choose the smallest useful file/directory scope. An existing dirty scope is refused; preserve it rather than clearing it.
-- One workspace has one active editing task and one owner session. For parallel writers use separate P4 clients AND physical roots. Pending CLs alone do not isolate files.
-- `prepare <file> ...` before editing through a shell or an unsupported tool. Native Claude Edit/Write and Codex apply_patch receive this preparation automatically through installed hooks.
-- Never clear read-only attributes to replace checkout. An existing file opened in another CL belongs to that work. New paths must be reserved before writing.
-- Use `delete <file>` and `move <source> <destination>` for P4 actions. A delete intentionally refuses existing local edits. Do not work around it with revert.
-- `collect` adds only new files reserved by this task; it never performs a blanket reconcile mutation. Inspect `changes` and its manifest, including add/delete/move actions and actual file contents.
-- Use `verify <profile>` for checks configured in `.p4-harness/config.json`. A changed file, changed base revision or changed check profile invalidates earlier evidence. No configured checks means `not_configured`, not a test pass.
-- `handoff --to codex|claude --note <next step>` transfers the active task and CL. The next owner starts from the recorded goal, scope, snapshot and verification evidence, then reads the relevant code.
-- For interruption, `pause --note <reason>` preserves changes. `resume --agent claude|codex` is an explicit recovery/ownership action; it does not sync or discard files.
-- `shelve` is an explicit checkpoint action; it does not submit. `finish` creates a report and releases the active task only when configured required checks match the current snapshot. It leaves the pending files for the normal submission process.
-- Raw submit/sync/revert/clean/force-resolve and server administration are outside the automatic coding workflow. The operator's normal P4 process owns these actions.
-- Continue within the user's authorized task scope without asking for permission for every file. Ask only when intent/scope or an actual access control requires it.
-- Report task ID, CL, snapshot ID, changed behavior, performed checks, unverified items and next action. Keep complete logs on disk and read relevant excerpts.
-
-Hooks protect supported tool calls and catch common accidental P4 commands. They are not an OS sandbox or a comprehensive shell/MCP parser. Preserve normal client permissions and organizational P4 access controls. Do not edit harness/agent configuration as part of an ordinary source task.
+- Existing task: `context`. New task: `doctor`, then `begin --task <id> --agent claude|codex --scope <path> --goal <goal>`. Preserve existing changes; select a clean, narrow scope.
+- One physical workspace has one editing task/session. Parallel writers require separate P4 clients AND physical roots. Use another agent only for a distinct review or handoff.
+- Supported native edit hooks prepare files automatically. Before shell/unsupported edits, `prepare <file> ...`; reserve new paths before writing. Never clear read-only flags or take files from another CL.
+- Use `delete`/`move` for those P4 actions. No automatic submit, sync, revert, clean, force resolve or server administration. Ordinary source tasks must not edit harness/agent settings.
+- `collect` adds only reserved new files and returns a compact manifest view. Review all actions; follow pagination or use `--full` if truncated. `changes --since <snapshot_id>` selects changed file entries; read relevant code/diffs too.
+- Run `verify <profile>` or `verify --required`. Required checks must match current files and configuration before `finish`. Unconfigured checks are not a pass. Failures retain original logs; read omitted details when needed.
+- `handoff --to <agent> --note <decisions, remaining work, next action>` transfers the same CL. `pause --note ...` / `resume --agent ...` preserve work. `shelve` checkpoints explicitly. `finish` reports pending work for the existing submission process.
+- Keep full logs/evidence on disk. Prefer compact output and changed files; avoid repeating inventories or conversation transcripts. Stored summaries never replace fresh authorization checks.
+- Read relevant `.p4-harness/project-map.md` sections for navigation when populated, and `.p4-harness/workflows.md` for detailed review/recovery when needed. Avoid re-reading rules already in context.
+- Continue within the user's authorized scope. Report task/CL, changed behavior, checks, unverified items and next action. Hooks cover supported calls/common mistakes; normal CLI permissions and P4 access controls remain necessary.

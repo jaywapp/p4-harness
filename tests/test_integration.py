@@ -99,6 +99,15 @@ class IntegrationTests(unittest.TestCase):
         self.config.data["checks"] = {"smoke": {"argv": [sys.executable, "-c", code], "timeout_seconds": 10}}
         self.config.data["required_checks"] = ["smoke"]
 
+    def cli(self, *args, expected=0):
+        write_json(self.config.control / "config.json", self.config.data)
+        runner = Path(__file__).resolve().parents[1] / "p4h.py"
+        result = subprocess.run([sys.executable, str(runner), "--workspace", str(self.root), *args],
+                                capture_output=True, text=True, encoding="utf-8", timeout=30,
+                                env=dict(os.environ, P4_HARNESS_AGENT="claude"))
+        self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+        return json.loads(result.stdout)
+
     def edit(self, text="changed\n", agent="claude", session="claude-session"):
         run_hook(self.flow, agent, {"hook_event_name": "PreToolUse", "tool_name": "Edit",
                                  "session_id": session, "tool_input": {"file_path": str(self.root / "src/main.txt")}})
@@ -299,6 +308,126 @@ class IntegrationTests(unittest.TestCase):
             self.flow.prepare(["src/main.txt"], "claude")
         self.assertNotIn("src/main.txt", self.flow.active()["prepared"])
         self.assertEqual((self.root / "src/main.txt").read_text(), "original\n")
+
+    def test_cli_compact_full_and_incremental_file_views(self):
+        self.begin()
+        self.edit()
+        self.flow.delete("src/delete.txt", "claude")
+        compact = self.cli("collect", "--limit", "1")
+        self.assertEqual(compact["actions"], {"delete": 1, "edit": 1})
+        self.assertEqual(compact["page"]["next_offset"], 1)
+        full = self.cli("changes", "--full")
+        self.assertEqual(full["snapshot_id"], compact["snapshot_id"])
+        self.assertEqual(len(full["files"]), 2)
+        self.assertIn("sha256", full["files"][1])
+        (self.root / "src/main.txt").write_text("second edit\n")
+        delta = self.cli("changes", "--since", compact["snapshot_id"])
+        self.assertEqual(delta["counts"], {"introduced": 0, "updated": 1, "removed": 0, "unchanged": 1})
+        self.assertEqual(delta["changes"], [{"path": "src/main.txt", "delta": "updated", "action": "edit"}])
+        self.assertNotEqual(delta["snapshot_id"], compact["snapshot_id"])
+        self.assertTrue(Path(delta["previous_manifest"]).is_file())
+        self.flow.prepare(["src/new.txt"], "claude")
+        (self.root / "src/new.txt").write_text("new file\n")
+        self.cli("collect")
+        full_delta = self.cli("changes", "--since", compact["snapshot_id"], "--full")
+        self.assertEqual(full_delta["counts"]["introduced"], 1)
+        self.assertIn("before", full_delta["changes"][0])
+
+    def test_context_is_live_and_handoff_does_not_copy_full_state(self):
+        self.assertIsNone(self.cli("context")["active_task"])
+        self.begin()
+        self.edit()
+        self.configure_check()
+        self.cli("verify", "smoke")
+        self.assertEqual(self.cli("context")["verification"], "passed")
+        self.config.data["checks"]["smoke"]["timeout_seconds"] = 11
+        self.assertEqual(self.cli("context")["checks"][0]["status"], "stale")
+        self.cli("verify", "smoke")
+        (self.root / "src/main.txt").write_text("after verification\n")
+        current = self.cli("context")
+        self.assertEqual(current["verification"], "pending")
+        self.assertEqual(current["checks"][0]["status"], "stale")
+        note = "decision / remaining work / next step; " * 40
+        self.flow.handoff("codex", note, "claude")
+        task_before = self.flow.active()
+        opened_before = self.raw("opened")
+        compact = self.cli("context")
+        self.assertEqual(compact["owner"], "codex")
+        self.assertEqual(len(compact["handoff"]["note"]), 500)
+        self.assertIn("handoff.note", compact["truncated_fields"])
+        self.assertEqual(self.cli("context", "--full")["handoff"]["note"], note)
+        self.assertEqual(self.flow.active(), task_before)
+        self.assertEqual(self.raw("opened"), opened_before)
+
+    def test_compact_views_still_reject_new_foreign_cl_and_baseline_changes(self):
+        self.begin()
+        self.edit()
+        baseline = self.cli("collect")["snapshot_id"]
+        self.raw("edit", str(self.root / "src/delete.txt"))
+        for args in (("context",), ("changes", "--since", baseline)):
+            with self.subTest(args=args):
+                result = self.cli(*args, expected=1)
+                self.assertIn("Another CL", result["error"])
+        self.assertIn("default", self.raw("opened", str(self.root / "src/delete.txt")))
+        self.raw("sync", str(self.root / "src/move.txt") + "#none")
+        self.assertIn("baseline revisions", self.cli("changes", "--since", baseline, expected=1)["error"])
+
+    def test_invalid_pagination_and_context_never_add_reserved_new_files(self):
+        self.begin()
+        self.flow.prepare(["src/new.txt"], "claude")
+        (self.root / "src/new.txt").write_text("keep my file\n")
+        self.assertIn("--limit", self.cli("collect", "--limit", "0", expected=1)["error"])
+        self.assertIn("Unregistered", self.cli("context", expected=1)["error"])
+        self.assertFalse(self.flow.fstat(self.root / "src/new.txt").get("action"))
+        self.assertEqual(self.cli("collect")["actions"], {"add": 1})
+
+    def test_cli_quiet_success_and_early_failure_diagnostic_keep_original_logs(self):
+        self.begin()
+        self.edit()
+        self.configure_check("print('progress\\n' * 5000)")
+        compact = self.cli("verify", "smoke")
+        self.assertEqual(compact["status"], "passed")
+        self.assertNotIn("output_tail", compact)
+        self.assertNotIn("diagnostics", compact)
+        self.assertGreater(Path(compact["log"]).stat().st_size, 4000)
+        self.assertIn("output_tail", self.cli("verify", "smoke", "--full"))
+        self.configure_check("print('error: missing dependency'); print('progress\\n' * 5000); raise SystemExit(7)")
+        failed = self.cli("verify", "smoke", expected=1)
+        self.assertEqual(failed["exit_code"], 7)
+        self.assertIn("error: missing dependency", failed["diagnostics"]["excerpt"])
+        self.assertTrue(failed["diagnostics"]["truncated"])
+        original = Path(failed["log"]).read_text(encoding="utf-8")
+        self.assertNotIn("missing dependency", original[-4000:])
+        self.assertIn("missing dependency", original)
+        self.assertEqual(self.cli("context")["checks"][0]["status"], "failed")
+        self.cli("finish", expected=1)
+
+    def test_required_batch_stops_on_failure_then_passes_all_at_same_snapshot(self):
+        self.begin()
+        self.edit()
+        self.config.data["checks"] = {
+            "first": {"argv": [sys.executable, "-c", "print('first passed')"]},
+            "second": {"argv": [sys.executable, "-c", "raise SystemExit(2)"]},
+            "third": {"argv": [sys.executable, "-c", "print('third passed')"]}}
+        self.config.data["required_checks"] = ["first", "second", "third"]
+        failed = self.cli("verify", "--required", expected=1)
+        self.assertEqual(failed["status"], "failed")
+        self.assertEqual(failed["not_run"], ["third"])
+        self.assertNotIn("third", self.flow.active()["checks"])
+        self.config.data["checks"]["second"]["argv"][-1] = "print('second passed')"
+        passed = self.cli("verify", "--required")
+        self.assertEqual(passed["status"], "passed")
+        self.assertEqual(passed["not_run"], [])
+        self.assertEqual(len({row["snapshot_id"] for row in passed["checks"]}), 1)
+        self.assertEqual(self.cli("finish")["verification"], "passed")
+
+    def test_required_batch_without_profiles_is_not_a_pass(self):
+        self.begin()
+        result = self.cli("verify", "--required")
+        self.assertEqual(result, {"status": "not_configured", "checks": [], "not_run": []})
+        self.assertEqual(self.cli("context")["verification"], "not_configured")
+        self.cli("verify", expected=1)
+        self.cli("verify", "smoke", "--required", expected=1)
 
 
 if __name__ == "__main__":

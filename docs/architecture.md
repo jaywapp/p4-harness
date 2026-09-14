@@ -22,10 +22,11 @@ flowchart TD
 | `common.py` | 물리 경로·scope 검사, JSON atomic write, OS 파일 lock |
 | `p4.py` | `-d`, 명시적 client/port/user, `-ztag -G` 실행·오류 처리 |
 | `workflow.py` | 작업 CL, checkout·add·delete·move, manifest, 인계·shelf·완료 |
-| `checks.py` | argv 기반 검증, timeout, 로그, snapshot에 연결된 결과 |
+| `checks.py` | argv 기반 검증, timeout, 원본 로그, snapshot에 연결된 결과, 필수 검증 일괄 실행 |
+| `reporting.py` | 페이지·변경분·실패 발췌·현재 인계 context; 전체 증거와 성공 판정은 보존 |
 | `hooks.py` | 두 제품의 이벤트를 공통 작업으로 변환 |
 | `install.py` | 기존 설정 병합·백업과 두 어댑터 설치 |
-| `templates/` | 두 제품에 배포하는 공통 규칙과 skill |
+| `templates/` | 공통 규칙·skill, 필요 시 읽는 상세 workflow, 사용자 소유 project map 틀 |
 
 ## 핵심 불변 조건
 
@@ -42,6 +43,8 @@ P4 server 명령과 form 입출력은 공식 Python marshal 형식인 `-G`와 ta
 명령은 shell 문자열 없이 argv로 실행하고 모든 P4 호출에 `-d <workspace root>`를 지정합니다. 이는 호출 프로세스의 cwd/PWD와 P4CONFIG 검색 기준이 달라지는 문제를 방지합니다. `@`, `#`, `%`는 일반 filespec에서 escape하며, 새 파일 추가는 필요한 경우 `add -f`에 원래 파일명을 전달합니다. reconcile은 `-n` preview만 사용합니다. `-I`로 ignore를 무시하지 않습니다. [P4 add](https://help.perforce.com/helix-core/server-apps/cmdref/current/Content/CmdRef/p4_add.html), [P4 reconcile](https://help.perforce.com/helix-core/server-apps/cmdref/current/Content/CmdRef/p4_reconcile.html).
 
 ## 의도적인 경계
+
+요약은 기존 `p4.exe`의 결과와 로컬 증거를 모델이 읽기 좋게 정리하는 계층입니다. 별도 모델 호출 없이 파일 항목·해시·로그를 처리하며, 소스 리뷰와 최신 권한 검사를 대체하지 않습니다. 기본 응답만 줄이고 전체 manifest·로그를 유지합니다. 구현 범위와 운영 규칙, 아직 측정하지 않은 효과는 [토큰 효율 설계](token-efficiency.md)에 정리했습니다.
 
 - 현재 client의 실제 root에서 동작합니다. client 생성·stream 변경·integrate/resolve·sync·submit은 기존 운영 절차에 맡깁니다. 이미 매핑된 stream client도 사용할 수 있으나 복잡한 매핑은 실제 환경에서 먼저 확인합니다.
 - 동일 물리 파일에 두 agent의 작성 작업을 병렬 실행하지 않습니다. 별도 client/root 간 unshelve·통합은 이번 버전의 자동 인계 범위 밖입니다.
