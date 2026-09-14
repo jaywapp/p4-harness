@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+*.egg-info/
+.coverage
+.p4-harness/
+.p4-harness.p4ignore
+.claude/settings.local.json

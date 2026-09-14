@@ -1,0 +1,47 @@
+name: Test harness
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m unittest discover -s tests -p test_unit.py -v
+      - name: Validate package includes templates
+        run: python -m pip install .
+      - run: p4h --help
+  perforce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Download test server and client
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/p4-tools"
+          curl --fail --location --retry 3 https://cdist2.perforce.com/perforce/r26.1/bin.linux26x86_64/p4 -o "$RUNNER_TEMP/p4-tools/p4"
+          curl --fail --location --retry 3 https://cdist2.perforce.com/perforce/r26.1/bin.linux26x86_64/p4d -o "$RUNNER_TEMP/p4-tools/p4d"
+          chmod 700 "$RUNNER_TEMP/p4-tools/p4" "$RUNNER_TEMP/p4-tools/p4d"
+          "$RUNNER_TEMP/p4-tools/p4" -V
+          "$RUNNER_TEMP/p4-tools/p4d" -V
+      - name: Test real disposable Perforce server
+        env:
+          P4_BIN: ${{ runner.temp }}/p4-tools/p4
+          P4D_BIN: ${{ runner.temp }}/p4-tools/p4d
+        run: python -m unittest discover -s tests -v
