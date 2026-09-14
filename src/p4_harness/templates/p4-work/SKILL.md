@@ -13,6 +13,8 @@ Read `.p4-harness/rules.md` if not already loaded. Shared CLI prefix:
 
 Use `context` for live task/CL/check/handoff information; investigate read-only without starting a task when appropriate. Follow existing scope and ownership, and read only relevant project-map/code sections.
 
+When a higher-level workflow assigns a subtask, reuse the parent task's CL and defer P4 `finish` until that parent job is complete. A read-only code reviewer does not need a writing handoff.
+
 After edits, use `collect` once, review its actions and relevant code, then `verify --required` (or a specific profile). Use `changes --since <snapshot_id>` for later file-list comparisons. Expand paginated/truncated output as needed. Failures point to full logs.
 
 Finish or explicitly handoff/pause as requested. Read `.p4-harness/workflows.md` for detailed review and recovery. Keep handoff notes to decisions, unresolved issues and next actions; another agent needs a distinct purpose.

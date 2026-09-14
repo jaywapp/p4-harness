@@ -7,7 +7,8 @@ Shared CLI prefix for Claude Code and Codex:
 ```
 
 - Existing task: `context`. New task: `doctor`, then `begin --task <id> --agent claude|codex --scope <path> --goal <goal>`. Preserve existing changes; select a clean, narrow scope.
-- One physical workspace has one editing task/session. Parallel writers require separate P4 clients AND physical roots. Use another agent only for a distinct review or handoff.
+- Reuse the current P4 task/CL for subtasks in a higher-level workflow. Do not begin or finish a CL per subtask; finish when the parent job is complete. Read-only review does not require ownership handoff.
+- One physical workspace has one editing task/session. Parallel writers require separate P4 clients AND physical roots. Use another agent for a distinct read-only analysis/review or an explicit writing handoff.
 - Supported native edit hooks prepare files automatically. Before shell/unsupported edits, `prepare <file> ...`; reserve new paths before writing. Never clear read-only flags or take files from another CL.
 - Use `delete`/`move` for those P4 actions. No automatic submit, sync, revert, clean, force resolve or server administration. Ordinary source tasks must not edit harness/agent settings.
 - `collect` adds only reserved new files and returns a compact manifest view. Review all actions; follow pagination or use `--full` if truncated. `changes --since <snapshot_id>` selects changed file entries; read relevant code/diffs too.

@@ -6,6 +6,8 @@
 
 이 Git 저장소는 **하네스 코드의 배포·개발 장소**입니다. 실제 소스 작업은 기존 **P4 client workspace**에서 수행합니다. P4 워크스페이스를 Git으로 변환하지 않습니다.
 
+작업 계획·JSONL 변경 이력·Claude 단계별 스킬·Codex 리뷰 핑퐁은 별도 [jsonl-prr](https://github.com/jaywapp/jsonl-prr)에서 관리합니다. `jsonl-prr`는 형상관리와 독립적이고, 이 저장소는 P4 파일 준비·CL·검증·인계에 집중합니다. 함께 사용할 때의 순서와 제한은 [역할 경계](docs/workflow-boundary.md)에 정리했습니다.
+
 ## 제공하는 기능
 
 | 기능 | Claude Code | Codex |
